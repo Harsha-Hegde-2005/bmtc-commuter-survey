@@ -1,7 +1,5 @@
 import streamlit as st
 from datetime import datetime
-import gspread
-from google.oauth2.service_account import Credentials
 
 from temp2 import find_survey_buses, norm, stops_df
 
@@ -23,24 +21,10 @@ st.markdown(
 st.divider()
 
 # --------------------------------------------------
-# GOOGLE SHEETS BACKEND
+# INITIALIZE TEMP STORAGE
 # --------------------------------------------------
-@st.cache_resource
-def get_sheet():
-    scope = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
-    ]
-    creds = Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"],
-        scopes=scope
-    )
-    client = gspread.authorize(creds)
-    return client.open("BMTC Survey Responses").sheet1
-
-def save_response(record):
-    sheet = get_sheet()
-    sheet.append_row(list(record.values()))
+if "responses" not in st.session_state:
+    st.session_state["responses"] = []
 
 # --------------------------------------------------
 # LOAD STOPS
@@ -68,6 +52,9 @@ if src and dst and src != dst:
     if "Other bus not listed" in selected_buses:
         other_bus = st.text_input("Enter the bus number")
 
+    st.divider()
+    st.subheader("⏱️ Service Experience")
+
     wait_time = st.radio(
         "Typical waiting time",
         ["< 5 min", "5–10 min", "10–20 min", "> 20 min"]
@@ -92,6 +79,9 @@ if src and dst and src != dst:
 
     st.divider()
 
+    # --------------------------------------------------
+    # SUBMIT (TEMP STORAGE)
+    # --------------------------------------------------
     if st.button("📨 Submit Response"):
         record = {
             "timestamp": datetime.now().isoformat(),
@@ -105,8 +95,11 @@ if src and dst and src != dst:
             "intermediate_stops": stops_text
         }
 
-        try:
-            save_response(record)
-            st.success("✅ Thank you! Your response has been recorded.")
-        except Exception:
-            st.error("❌ Failed to save response. Please try again.")
+        st.session_state["responses"].append(record)
+        st.success("✅ Response captured successfully!")
+
+# --------------------------------------------------
+# DEBUG VIEW (OPTIONAL)
+# --------------------------------------------------
+with st.expander("📊 View captured responses (temporary)"):
+    st.write(st.session_state["responses"])
