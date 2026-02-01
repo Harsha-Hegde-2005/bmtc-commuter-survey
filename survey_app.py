@@ -1,3 +1,4 @@
+import json
 import streamlit as st
 from datetime import datetime
 import gspread
@@ -31,12 +32,19 @@ def get_sheet():
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive"
     ]
+
+    service_account_info = json.loads(
+        st.secrets["gcp_service_account"]["json"]
+    )
+
     creds = Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"],
+        service_account_info,
         scopes=scope
     )
+
     client = gspread.authorize(creds)
     return client.open("BMTC Survey Responses").sheet1
+
 
 def save_response(record):
     sheet = get_sheet()
@@ -115,3 +123,4 @@ if src and dst and src != dst:
             st.success("✅ Response saved successfully!")
         except Exception as e:
             st.error(f"❌ Error saving response: {e}")
+
