@@ -1,6 +1,7 @@
 import streamlit as st
-import pandas as pd
 from datetime import datetime
+import gspread
+from google.oauth2.service_account import Credentials
 
 from temp2 import find_survey_buses, norm, stops_df
 
@@ -22,13 +23,40 @@ st.markdown(
 st.divider()
 
 # --------------------------------------------------
-# LOAD STOPS
+# GOOGLE SHEETS BACKEND
 # --------------------------------------------------
-all_stops = sorted(stops_df.stop_name.unique())
+@st.cache_resource
+def get_sheet():
+    scope = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    creds = Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"],
+        scopes=scope
+    )
+    client = gspread.authorize(creds)
+    return client.open("BMTC Survey Responses").sheet1
+
+def save_response(record):
+    sheet = get_sheet()
+    sheet.append_row([
+        record["timestamp"],
+        record["source"],
+        record["destination"],
+        record["selected_buses"],
+        record["other_bus"],
+        record["wait_time"],
+        record["frequency"],
+        record["transfers"],
+        record["intermediate_stops"]
+    ])
 
 # --------------------------------------------------
 # FORM
 # --------------------------------------------------
+all_stops = sorted(stops_df.stop_name.unique())
+
 st.subheader("📍 Your Regular Journey")
 
 src = st.selectbox("Source Stop", all_stops)
@@ -37,18 +65,15 @@ dst = st.selectbox("Destination Stop", all_stops)
 if src and dst and src != dst:
     possible_buses = find_survey_buses(norm(src), norm(dst))
 
-    st.divider()
     st.subheader("🚌 Bus(es) You Usually Take")
-
-    bus_options = possible_buses + ["Other bus not listed"]
-    selected_buses = st.multiselect("Select all that apply", bus_options)
+    selected_buses = st.multiselect(
+        "Select all that apply",
+        possible_buses + ["Other bus not listed"]
+    )
 
     other_bus = ""
     if "Other bus not listed" in selected_buses:
         other_bus = st.text_input("Enter the bus number")
-
-    st.divider()
-    st.subheader("⏱️ Service Experience")
 
     wait_time = st.radio(
         "Typical waiting time",
@@ -72,11 +97,6 @@ if src and dst and src != dst:
 
     stops_text = st.text_area("Major intermediate stops (optional)")
 
-    st.divider()
-
-    # --------------------------------------------------
-    # SUBMIT → SAVE TO CSV
-    # --------------------------------------------------
     if st.button("📨 Submit Response"):
         record = {
             "timestamp": datetime.now().isoformat(),
@@ -91,16 +111,7 @@ if src and dst and src != dst:
         }
 
         try:
-            df_new = pd.DataFrame([record])
-
-            try:
-                df_old = pd.read_csv("survey_responses.csv")
-                df = pd.concat([df_old, df_new], ignore_index=True)
-            except FileNotFoundError:
-                df = df_new
-
-            df.to_csv("survey_responses.csv", index=False)
-            st.success("✅ Response saved to survey_responses.csv")
-
+            save_response(record)
+            st.success("✅ Response saved successfully!")
         except Exception as e:
-            st.error(f"❌ Failed to save response: {e}")
+            st.error(f"❌ Error saving response: {e}")
