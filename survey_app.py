@@ -1,3 +1,6 @@
+import gspread
+from google.oauth2.service_account import Credentials
+from datetime import datetime
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -104,3 +107,4 @@ if src and dst and src != dst:
         df.to_csv("survey_responses.csv", index=False)
 
         st.success("✅ Thank you! Your response has been recorded.")
+
