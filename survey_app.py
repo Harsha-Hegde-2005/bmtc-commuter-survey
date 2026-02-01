@@ -1,9 +1,10 @@
-import gspread
-from google.oauth2.service_account import Credentials
-from datetime import datetime
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+
+import gspread
+from google.oauth2.service_account import Credentials
+
 from temp2 import find_all_possible_buses, norm, stops_df
 
 # --------------------------------------------------
@@ -26,6 +27,40 @@ st.markdown(
 )
 
 st.divider()
+
+# --------------------------------------------------
+# GOOGLE SHEETS BACKEND (STREAMLIT SAFE)
+# --------------------------------------------------
+@st.cache_resource
+def get_sheet():
+    scope = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+
+    creds = Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"],
+        scopes=scope
+    )
+
+    client = gspread.authorize(creds)
+    sheet = client.open("BMTC Survey Responses").sheet1
+    return sheet
+
+
+def save_response(record):
+    sheet = get_sheet()
+    sheet.append_row([
+        record["timestamp"],
+        record["source"],
+        record["destination"],
+        record["selected_buses"],
+        record["other_bus"],
+        record["wait_time"],
+        record["frequency"],
+        record["transfers"],
+        record["intermediate_stops"]
+    ])
 
 # --------------------------------------------------
 # LOAD STOPS
@@ -85,6 +120,9 @@ if src and dst and src != dst:
 
     st.divider()
 
+    # --------------------------------------------------
+    # SUBMIT RESPONSE (GOOGLE SHEETS)
+    # --------------------------------------------------
     if st.button("📨 Submit Response"):
         record = {
             "timestamp": datetime.now().isoformat(),
@@ -99,12 +137,7 @@ if src and dst and src != dst:
         }
 
         try:
-            df = pd.read_csv("survey_responses.csv")
-            df = pd.concat([df, pd.DataFrame([record])], ignore_index=True)
-        except FileNotFoundError:
-            df = pd.DataFrame([record])
-
-        df.to_csv("survey_responses.csv", index=False)
-
-        st.success("✅ Thank you! Your response has been recorded.")
-
+            save_response(record)
+            st.success("✅ Thank you! Your response has been recorded.")
+        except Exception as e:
+            st.error("❌ Failed to save response. Please try again.")
