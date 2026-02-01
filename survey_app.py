@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 from datetime import datetime
 
 from temp2 import find_survey_buses, norm, stops_df
@@ -19,12 +20,6 @@ st.markdown(
 )
 
 st.divider()
-
-# --------------------------------------------------
-# INITIALIZE TEMP STORAGE
-# --------------------------------------------------
-if "responses" not in st.session_state:
-    st.session_state["responses"] = []
 
 # --------------------------------------------------
 # LOAD STOPS
@@ -80,7 +75,7 @@ if src and dst and src != dst:
     st.divider()
 
     # --------------------------------------------------
-    # SUBMIT (TEMP STORAGE)
+    # SUBMIT → SAVE TO CSV
     # --------------------------------------------------
     if st.button("📨 Submit Response"):
         record = {
@@ -95,11 +90,17 @@ if src and dst and src != dst:
             "intermediate_stops": stops_text
         }
 
-        st.session_state["responses"].append(record)
-        st.success("✅ Response captured successfully!")
+        try:
+            df_new = pd.DataFrame([record])
 
-# --------------------------------------------------
-# DEBUG VIEW (OPTIONAL)
-# --------------------------------------------------
-with st.expander("📊 View captured responses (temporary)"):
-    st.write(st.session_state["responses"])
+            try:
+                df_old = pd.read_csv("survey_responses.csv")
+                df = pd.concat([df_old, df_new], ignore_index=True)
+            except FileNotFoundError:
+                df = df_new
+
+            df.to_csv("survey_responses.csv", index=False)
+            st.success("✅ Response saved to survey_responses.csv")
+
+        except Exception as e:
+            st.error(f"❌ Failed to save response: {e}")
