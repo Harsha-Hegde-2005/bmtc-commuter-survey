@@ -1,11 +1,9 @@
 import streamlit as st
-import pandas as pd
 from datetime import datetime
-
 import gspread
 from google.oauth2.service_account import Credentials
 
-from temp2 import find_all_possible_buses, norm, stops_df
+from temp2 import find_survey_buses, norm, stops_df
 
 # --------------------------------------------------
 # PAGE CONFIG
@@ -16,20 +14,16 @@ st.set_page_config(
     layout="centered"
 )
 
+st.markdown("<h1 style='text-align:center;'>🚌 BMTC Commuter Survey</h1>", unsafe_allow_html=True)
 st.markdown(
-    "<h1 style='text-align:center;'>🚌 BMTC Commuter Survey</h1>",
-    unsafe_allow_html=True
-)
-st.markdown(
-    "<p style='text-align:center;color:gray;'>"
-    "Academic survey to improve BMTC journey planning</p>",
+    "<p style='text-align:center;color:gray;'>Academic survey to improve BMTC journey planning</p>",
     unsafe_allow_html=True
 )
 
 st.divider()
 
 # --------------------------------------------------
-# GOOGLE SHEETS BACKEND (STREAMLIT SAFE)
+# GOOGLE SHEETS BACKEND
 # --------------------------------------------------
 @st.cache_resource
 def get_sheet():
@@ -37,30 +31,16 @@ def get_sheet():
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive"
     ]
-
     creds = Credentials.from_service_account_info(
         st.secrets["gcp_service_account"],
         scopes=scope
     )
-
     client = gspread.authorize(creds)
-    sheet = client.open("BMTC Survey Responses").sheet1
-    return sheet
-
+    return client.open("BMTC Survey Responses").sheet1
 
 def save_response(record):
     sheet = get_sheet()
-    sheet.append_row([
-        record["timestamp"],
-        record["source"],
-        record["destination"],
-        record["selected_buses"],
-        record["other_bus"],
-        record["wait_time"],
-        record["frequency"],
-        record["transfers"],
-        record["intermediate_stops"]
-    ])
+    sheet.append_row(list(record.values()))
 
 # --------------------------------------------------
 # LOAD STOPS
@@ -68,7 +48,7 @@ def save_response(record):
 all_stops = sorted(stops_df.stop_name.unique())
 
 # --------------------------------------------------
-# QUESTIONS
+# FORM
 # --------------------------------------------------
 st.subheader("📍 Your Regular Journey")
 
@@ -76,31 +56,25 @@ src = st.selectbox("Source Stop", all_stops)
 dst = st.selectbox("Destination Stop", all_stops)
 
 if src and dst and src != dst:
-    possible_buses = find_all_possible_buses(norm(src), norm(dst))
+    possible_buses = find_survey_buses(norm(src), norm(dst))
 
     st.divider()
-    st.subheader("🚌 Buses You Usually Take")
+    st.subheader("🚌 Bus(es) You Usually Take")
 
     bus_options = possible_buses + ["Other bus not listed"]
-    selected_buses = st.multiselect(
-        "Select all that apply",
-        bus_options
-    )
+    selected_buses = st.multiselect("Select all that apply", bus_options)
 
     other_bus = ""
     if "Other bus not listed" in selected_buses:
         other_bus = st.text_input("Enter the bus number")
 
-    st.divider()
-    st.subheader("⏱️ Service Experience")
-
     wait_time = st.radio(
-        "Typical waiting time for this bus",
+        "Typical waiting time",
         ["< 5 min", "5–10 min", "10–20 min", "> 20 min"]
     )
 
     frequency = st.radio(
-        "How frequent is this bus during peak hours?",
+        "Bus frequency during peak hours",
         [
             "Every 5–10 minutes",
             "Every 10–20 minutes",
@@ -110,19 +84,14 @@ if src and dst and src != dst:
     )
 
     transfers = st.radio(
-        "How many bus changes are required?",
+        "Bus changes required",
         ["Direct (0)", "1 transfer", "2+ transfers"]
     )
 
-    stops_text = st.text_area(
-        "Major intermediate stops you remember (optional)"
-    )
+    stops_text = st.text_area("Major intermediate stops (optional)")
 
     st.divider()
 
-    # --------------------------------------------------
-    # SUBMIT RESPONSE (GOOGLE SHEETS)
-    # --------------------------------------------------
     if st.button("📨 Submit Response"):
         record = {
             "timestamp": datetime.now().isoformat(),
@@ -139,5 +108,5 @@ if src and dst and src != dst:
         try:
             save_response(record)
             st.success("✅ Thank you! Your response has been recorded.")
-        except Exception as e:
+        except Exception:
             st.error("❌ Failed to save response. Please try again.")
